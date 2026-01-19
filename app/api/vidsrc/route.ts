@@ -35,7 +35,16 @@ export async function GET(request: Request) {
   const episode = url.searchParams.get('episode');
 
   if (!tmdbId) {
-    return NextResponse.json({ success: false, error: 'Missing tmdbId' }, { status: 400 });
+    return new Response(
+      JSON.stringify({ success: false, error: 'Missing tmdbId' }),
+      {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      }
+    );
   }
 
   const embedHosts = [
@@ -73,32 +82,77 @@ export async function GET(request: Request) {
     }
 
     if (!embedHtml) {
-      return NextResponse.json({ success: false, error: 'No usable embed page found' }, { status: 502 });
+      return new Response(
+        JSON.stringify({ success: false, error: 'No usable embed page found' }),
+        {
+          status: 502,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
     }
 
     // If embed page already contains .m3u8 links, return first one
     const directM3u8 = embedHtml.match(/https?:[^"'\s]+\.m3u8[^"'\s]*/i);
     if (directM3u8) {
-      return NextResponse.json({ success: true, url: directM3u8[0], source: usedEmbedUrl });
+      return new Response(
+        JSON.stringify({ success: true, url: directM3u8[0], source: usedEmbedUrl }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
     }
 
     // Find cloudnestra rcp iframe
     const iframeMatch = embedHtml.match(/<iframe[^>]*src=["']([^"']*cloudnestra\.com\/rcp\/([^"']+))["']/i);
     if (!iframeMatch) {
-      return NextResponse.json({ success: false, error: 'Could not find cloudnestra RCP iframe' }, { status: 502 });
+      return new Response(
+        JSON.stringify({ success: false, error: 'Could not find cloudnestra RCP iframe' }),
+        {
+          status: 502,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
     }
 
     const rcpPath = iframeMatch[2];
     const rcpUrl = `https://cloudnestra.com/rcp/${rcpPath}`;
     const rcpRes = await fetchWithHeaders(rcpUrl, usedEmbedUrl || undefined, 10000);
     if (!rcpRes.ok) {
-      return NextResponse.json({ success: false, error: `RCP fetch returned ${rcpRes.status}` }, { status: 502 });
+      return new Response(
+        JSON.stringify({ success: false, error: `RCP fetch returned ${rcpRes.status}` }),
+        {
+          status: 502,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
     }
     const rcpHtml = await rcpRes.text();
 
     // If Turnstile is present, we won't attempt to bypass here
     if (rcpHtml.includes('cf-turnstile') || rcpHtml.includes('turnstile')) {
-      return NextResponse.json({ success: false, error: 'RCP page protected by Cloudflare Turnstile (no bypass configured)' }, { status: 503 });
+      return new Response(
+        JSON.stringify({ success: false, error: 'RCP page protected by Cloudflare Turnstile (no bypass configured)' }),
+        {
+          status: 503,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
     }
 
     // Find prorcp or srcrcp endpoint path
@@ -110,7 +164,16 @@ export async function GET(request: Request) {
     ]);
 
     if (!patternMatch) {
-      return NextResponse.json({ success: false, error: 'Could not find prorcp/srcrcp path' }, { status: 502 });
+      return new Response(
+        JSON.stringify({ success: false, error: 'Could not find prorcp/srcrcp path' }),
+        {
+          status: 502,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
     }
 
     // Determine type from matched regex (prorcp vs srcrcp)
@@ -122,7 +185,16 @@ export async function GET(request: Request) {
     const endpointUrl = `https://cloudnestra.com/${endpointType}/${endpointPath}`;
     const endpointRes = await fetchWithHeaders(endpointUrl, 'https://cloudnestra.com/', 10000);
     if (!endpointRes.ok) {
-      return NextResponse.json({ success: false, error: `Endpoint fetch returned ${endpointRes.status}` }, { status: 502 });
+      return new Response(
+        JSON.stringify({ success: false, error: `Endpoint fetch returned ${endpointRes.status}` }),
+        {
+          status: 502,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
     }
     const endpointHtml = await endpointRes.text();
 
@@ -131,8 +203,28 @@ export async function GET(request: Request) {
     if (!fileMatch) {
       // As a fallback, look for any .m3u8 in the endpoint
       const anyM3u8 = endpointHtml.match(/https?:[^"'\s]+\.m3u8[^"'\s]*/i);
-      if (anyM3u8) return NextResponse.json({ success: true, url: anyM3u8[0] });
-      return NextResponse.json({ success: false, error: 'Could not find file URL in endpoint' }, { status: 502 });
+      if (anyM3u8) {
+        return new Response(
+          JSON.stringify({ success: true, url: anyM3u8[0] }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            },
+          }
+        );
+      }
+      return new Response(
+        JSON.stringify({ success: false, error: 'Could not find file URL in endpoint' }),
+        {
+          status: 502,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
     }
 
     const fileUrlRaw = fileMatch[1];
@@ -154,15 +246,42 @@ export async function GET(request: Request) {
     }
 
     if (resolved.length === 0) {
-      return NextResponse.json({ success: false, error: 'No resolved .m3u8 URLs found' }, { status: 502 });
+      return new Response(
+        JSON.stringify({ success: false, error: 'No resolved .m3u8 URLs found' }),
+        {
+          status: 502,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
     }
 
     // Return first resolved URL (client can try others)
-    return NextResponse.json({ success: true, url: resolved[0], all: resolved });
+    return new Response(
+      JSON.stringify({ success: true, url: resolved[0], all: resolved }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      }
+    );
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    return new Response(
+      JSON.stringify({ success: false, error: msg }),
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      }
+    );
   }
 }
 
