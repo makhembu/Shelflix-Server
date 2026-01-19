@@ -44,6 +44,8 @@ export async function GET(request: Request) {
     ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
   });
 
+  // Proxy base for CORS-enabled relaying (use env var when deployed)
+  const proxyBase = process.env.CF_PROXY_URL || process.env.NEXT_PUBLIC_CF_PROXY_URL || 'http://127.0.0.1:8787';
   if (!tmdbId) {
     const log = { success: false, error: 'Missing tmdbId' };
     console.log('[vidsrc] Response:', log);
@@ -111,7 +113,9 @@ export async function GET(request: Request) {
     // If embed page already contains .m3u8 links, return first one
     const directM3u8 = embedHtml.match(/https?:[^"'\s]+\.m3u8[^"'\s]*/i);
     if (directM3u8) {
-      const log = { success: true, url: directM3u8[0], source: usedEmbedUrl };
+      const original = directM3u8[0];
+      const proxy = `${proxyBase}/?url=${encodeURIComponent(original)}`;
+      const log = { success: true, url: original, proxyUrl: proxy, source: usedEmbedUrl };
       console.log('[vidsrc] Response:', log);
       return new Response(
         JSON.stringify(log),
@@ -230,7 +234,9 @@ export async function GET(request: Request) {
       // As a fallback, look for any .m3u8 in the endpoint
       const anyM3u8 = endpointHtml.match(/https?:[^"'\s]+\.m3u8[^"'\s]*/i);
       if (anyM3u8) {
-        const log = { success: true, url: anyM3u8[0] };
+        const original = anyM3u8[0];
+        const proxy = `${proxyBase}/?url=${encodeURIComponent(original)}`;
+        const log = { success: true, url: original, proxyUrl: proxy };
         console.log('[vidsrc] Response:', log);
         return new Response(
           JSON.stringify(log),
@@ -291,7 +297,9 @@ export async function GET(request: Request) {
     }
 
     // Return first resolved URL (client can try others)
-    const log = { success: true, url: resolved[0], all: resolved };
+    const original = resolved[0];
+    const proxy = `${proxyBase}/?url=${encodeURIComponent(original)}`;
+    const log = { success: true, url: original, proxyUrl: proxy, all: resolved };
     console.log('[vidsrc] Response:', log);
     return new Response(
       JSON.stringify(log),
