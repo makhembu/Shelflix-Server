@@ -34,9 +34,21 @@ export async function GET(request: Request) {
   const season = url.searchParams.get('season');
   const episode = url.searchParams.get('episode');
 
+  // Log incoming request
+  console.log('[vidsrc] Incoming request:', {
+    tmdbId,
+    type,
+    season,
+    episode,
+    time: new Date().toISOString(),
+    ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+  });
+
   if (!tmdbId) {
+    const log = { success: false, error: 'Missing tmdbId' };
+    console.log('[vidsrc] Response:', log);
     return new Response(
-      JSON.stringify({ success: false, error: 'Missing tmdbId' }),
+      JSON.stringify(log),
       {
         status: 400,
         headers: {
@@ -82,8 +94,10 @@ export async function GET(request: Request) {
     }
 
     if (!embedHtml) {
+      const log = { success: false, error: 'No usable embed page found' };
+      console.log('[vidsrc] Response:', log);
       return new Response(
-        JSON.stringify({ success: false, error: 'No usable embed page found' }),
+        JSON.stringify(log),
         {
           status: 502,
           headers: {
@@ -97,8 +111,10 @@ export async function GET(request: Request) {
     // If embed page already contains .m3u8 links, return first one
     const directM3u8 = embedHtml.match(/https?:[^"'\s]+\.m3u8[^"'\s]*/i);
     if (directM3u8) {
+      const log = { success: true, url: directM3u8[0], source: usedEmbedUrl };
+      console.log('[vidsrc] Response:', log);
       return new Response(
-        JSON.stringify({ success: true, url: directM3u8[0], source: usedEmbedUrl }),
+        JSON.stringify(log),
         {
           status: 200,
           headers: {
@@ -112,8 +128,10 @@ export async function GET(request: Request) {
     // Find cloudnestra rcp iframe
     const iframeMatch = embedHtml.match(/<iframe[^>]*src=["']([^"']*cloudnestra\.com\/rcp\/([^"']+))["']/i);
     if (!iframeMatch) {
+      const log = { success: false, error: 'Could not find cloudnestra RCP iframe' };
+      console.log('[vidsrc] Response:', log);
       return new Response(
-        JSON.stringify({ success: false, error: 'Could not find cloudnestra RCP iframe' }),
+        JSON.stringify(log),
         {
           status: 502,
           headers: {
@@ -128,8 +146,10 @@ export async function GET(request: Request) {
     const rcpUrl = `https://cloudnestra.com/rcp/${rcpPath}`;
     const rcpRes = await fetchWithHeaders(rcpUrl, usedEmbedUrl || undefined, 10000);
     if (!rcpRes.ok) {
+      const log = { success: false, error: `RCP fetch returned ${rcpRes.status}` };
+      console.log('[vidsrc] Response:', log);
       return new Response(
-        JSON.stringify({ success: false, error: `RCP fetch returned ${rcpRes.status}` }),
+        JSON.stringify(log),
         {
           status: 502,
           headers: {
@@ -143,8 +163,10 @@ export async function GET(request: Request) {
 
     // If Turnstile is present, we won't attempt to bypass here
     if (rcpHtml.includes('cf-turnstile') || rcpHtml.includes('turnstile')) {
+      const log = { success: false, error: 'RCP page protected by Cloudflare Turnstile (no bypass configured)' };
+      console.log('[vidsrc] Response:', log);
       return new Response(
-        JSON.stringify({ success: false, error: 'RCP page protected by Cloudflare Turnstile (no bypass configured)' }),
+        JSON.stringify(log),
         {
           status: 503,
           headers: {
@@ -164,8 +186,10 @@ export async function GET(request: Request) {
     ]);
 
     if (!patternMatch) {
+      const log = { success: false, error: 'Could not find prorcp/srcrcp path' };
+      console.log('[vidsrc] Response:', log);
       return new Response(
-        JSON.stringify({ success: false, error: 'Could not find prorcp/srcrcp path' }),
+        JSON.stringify(log),
         {
           status: 502,
           headers: {
@@ -185,8 +209,10 @@ export async function GET(request: Request) {
     const endpointUrl = `https://cloudnestra.com/${endpointType}/${endpointPath}`;
     const endpointRes = await fetchWithHeaders(endpointUrl, 'https://cloudnestra.com/', 10000);
     if (!endpointRes.ok) {
+      const log = { success: false, error: `Endpoint fetch returned ${endpointRes.status}` };
+      console.log('[vidsrc] Response:', log);
       return new Response(
-        JSON.stringify({ success: false, error: `Endpoint fetch returned ${endpointRes.status}` }),
+        JSON.stringify(log),
         {
           status: 502,
           headers: {
@@ -204,8 +230,10 @@ export async function GET(request: Request) {
       // As a fallback, look for any .m3u8 in the endpoint
       const anyM3u8 = endpointHtml.match(/https?:[^"'\s]+\.m3u8[^"'\s]*/i);
       if (anyM3u8) {
+        const log = { success: true, url: anyM3u8[0] };
+        console.log('[vidsrc] Response:', log);
         return new Response(
-          JSON.stringify({ success: true, url: anyM3u8[0] }),
+          JSON.stringify(log),
           {
             status: 200,
             headers: {
@@ -215,8 +243,10 @@ export async function GET(request: Request) {
           }
         );
       }
+      const log = { success: false, error: 'Could not find file URL in endpoint' };
+      console.log('[vidsrc] Response:', log);
       return new Response(
-        JSON.stringify({ success: false, error: 'Could not find file URL in endpoint' }),
+        JSON.stringify(log),
         {
           status: 502,
           headers: {
@@ -246,8 +276,10 @@ export async function GET(request: Request) {
     }
 
     if (resolved.length === 0) {
+      const log = { success: false, error: 'No resolved .m3u8 URLs found' };
+      console.log('[vidsrc] Response:', log);
       return new Response(
-        JSON.stringify({ success: false, error: 'No resolved .m3u8 URLs found' }),
+        JSON.stringify(log),
         {
           status: 502,
           headers: {
@@ -259,8 +291,10 @@ export async function GET(request: Request) {
     }
 
     // Return first resolved URL (client can try others)
+    const log = { success: true, url: resolved[0], all: resolved };
+    console.log('[vidsrc] Response:', log);
     return new Response(
-      JSON.stringify({ success: true, url: resolved[0], all: resolved }),
+      JSON.stringify(log),
       {
         status: 200,
         headers: {
@@ -272,8 +306,10 @@ export async function GET(request: Request) {
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    const log = { success: false, error: msg };
+    console.log('[vidsrc] Response:', log);
     return new Response(
-      JSON.stringify({ success: false, error: msg }),
+      JSON.stringify(log),
       {
         status: 500,
         headers: {
