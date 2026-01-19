@@ -12,7 +12,7 @@
  */
 
 export default {
-  async fetch(request, env, ctx): Promise<Response> {
+  async fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const target = url.searchParams.get("url");
     if (target) {
@@ -33,4 +33,4 @@ export default {
     // Fallback: serve static asset or 404
     return new Response("Missing url param", { status: 400 });
   },
-};
+} satisfies ExportedHandler<any>;
